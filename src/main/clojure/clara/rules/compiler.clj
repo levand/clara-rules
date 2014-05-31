@@ -5,6 +5,7 @@
             [clojure.core.reducers :as r]
             [clojure.set :as s]
             [clara.rules.engine :as eng]
+            [clara.rules.listener :as listener]
             [clojure.string :as string]
             [clara.rules.schema :as schema]
             [schema.core :as sc]
@@ -727,9 +728,16 @@
         ;; of alpha nodes they target.
         ;; We cache an alpha-map for facts of a given type to avoid computing
         ;; them for every fact entered.
-        get-alphas-fn (create-get-alphas-fn fact-type-fn ancestors-fn rulebase)]
+        get-alphas-fn (create-get-alphas-fn fact-type-fn ancestors-fn rulebase)
+        listener (if-let [listeners (:listeners options)]
+                   (listener/delegating-listener listeners)
+                   listener/default-listener)]
 
-    (LocalSession. rulebase (eng/local-memory rulebase transport) transport get-alphas-fn)))
+    (LocalSession. rulebase
+                   (eng/local-memory rulebase transport)
+                   transport
+                   listener
+                   get-alphas-fn)))
 
 (defn mk-session
   "Creates a new session using the given rule source. Thew resulting session

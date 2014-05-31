@@ -5,8 +5,8 @@
             [clojure.set :as s]
             [clojure.string :as string]
             [clara.rules.memory :as mem]
+            [clara.rules.listener :as l]
             [clara.rules.platform :as platform]))
-
 
 ;; The accumulator is a Rete extension to run an accumulation (such as sum, average, or similar operation)
 ;; over a collection of values passing through the Rete network. This object defines the behavior
@@ -43,7 +43,13 @@
   (query [session query params])
 
   ;; Returns the working memory implementation used by the session.
-  (working-memory [session]))
+  (working-memory [session])
+
+  ;; Returns the listeners associated with the session.
+  (get-listeners [session])
+
+  ;; Sends a message to the session listeners. TODO: document the structure.
+  (send-to-listeners [session message]))
 
 ;; Left activation protocol for various types of beta nodes.
 (defprotocol ILeftActivate
@@ -156,8 +162,8 @@
 
 ;; Protocol for activation of Rete alpha nodes.
 (defprotocol IAlphaActivate
-  (alpha-activate [node facts memory transport])
-  (alpha-retract [node facts memory transport]))
+  (alpha-activate [node facts memory transport listener])
+  (alpha-retract [node facts memory transport listener]))
 
 
 ;; Active session during rule execution.
@@ -198,7 +204,7 @@
     (let [insertions (mem/remove-insertions! memory node tokens)]
       (doseq [[cls fact-group] (group-by type insertions)
               root (get-in (mem/get-rulebase memory) [:alpha-roots cls])]
-        (alpha-retract root fact-group memory transport))))
+        (alpha-retract root fact-group memory transport nil))))
 
   (get-join-keys [node] [])
 
@@ -223,14 +229,16 @@
 ;; propagates matches to its children.
 (defrecord AlphaNode [env children activation]
   IAlphaActivate
-  (alpha-activate [node facts memory transport]
+  (alpha-activate [node facts memory transport transient-listener]
     (send-elements
-     transport memory children
+     transport
+     memory
+     children
      (for [fact facts
            :let [bindings (activation fact env)] :when bindings] ; FIXME: add env.
        (->Element fact bindings))))
 
-  (alpha-retract [node facts memory transport]
+  (alpha-retract [node facts memory transport transient-listener]
 
     (retract-elements
      transport memory children
@@ -562,34 +570,52 @@
 
           (recur (mem/pop-activation! transient-memory)))))))
 
-(deftype LocalSession [rulebase memory transport get-alphas-fn]
+(deftype LocalSession [rulebase memory transport listener get-alphas-fn]
   ISession
   (insert [session facts]
-    (let [transient-memory (mem/to-transient memory)]
+    (let [transient-memory (mem/to-transient memory)
+          transient-listener (l/to-transient listener)]
+
+      (l/add-facts transient-listener facts)
+
       (doseq [[alpha-roots fact-group] (get-alphas-fn facts)
               root alpha-roots]
-        (alpha-activate root fact-group transient-memory transport))
-      (LocalSession. rulebase (mem/to-persistent! transient-memory) transport get-alphas-fn)))
+        (alpha-activate root fact-group transient-memory transport transient-listener))
+      (LocalSession. rulebase
+                     (mem/to-persistent! transient-memory)
+                     transport
+                     (l/to-persistent transient-listener)
+                     get-alphas-fn)))
 
   (retract [session facts]
 
-    (let [transient-memory (mem/to-transient memory)]
+    (let [transient-memory (mem/to-transient memory)
+          transient-listener (l/to-transient listener)]
       (doseq [[alpha-roots fact-group] (get-alphas-fn facts)
               root alpha-roots]
-        (alpha-retract root fact-group transient-memory transport))
+        (alpha-retract root fact-group transient-memory transport transient-listener))
 
-      (LocalSession. rulebase (mem/to-persistent! transient-memory) transport get-alphas-fn)))
+      (LocalSession. rulebase
+                     (mem/to-persistent! transient-memory)
+                     transport
+                     (l/to-persistent transient-listener)
+                     get-alphas-fn)))
 
   (fire-rules [session]
 
-    (let [transient-memory (mem/to-transient memory)]
+    (let [transient-memory (mem/to-transient memory)
+          transient-listener (l/to-transient listener)]
       (fire-rules* rulebase
                    (:production-nodes rulebase)
                    transient-memory
                    transport
                    get-alphas-fn)
 
-      (LocalSession. rulebase (mem/to-persistent! transient-memory) transport get-alphas-fn)))
+      (LocalSession. rulebase
+                     (mem/to-persistent! transient-memory)
+                     transport
+                     (l/to-persistent transient-listener)
+                     get-alphas-fn)))
 
   ;; TODO: queries shouldn't require the use of transient memory.
   (query [session query params]
@@ -598,7 +624,26 @@
         (platform/throw-error (str "The query " query " is invalid or not included in the rule base.")))
       (map :bindings (mem/get-tokens (mem/to-transient (working-memory session)) query-node params))))
 
-  (working-memory [session] memory))
+  (working-memory [session] memory)
+
+  (get-listeners [session]
+    (if (= listener l/default-listener)
+      []
+      (l/get-children listener)))
+
+  (send-to-listeners [session message]
+
+    ;; Send the message to the listeners and then return
+    ;; the updated state.
+    (let [updated-listener (-> (l/to-transient listener)
+                               (l/send-message message)
+                               (l/to-persistent))]
+
+      (LocalSession. rulebase
+                     memory
+                     transport
+                     updated-listener
+                     get-alphas-fn))))
 
 
 (defn local-memory

@@ -50,7 +50,7 @@
 (defn- insert-facts!
   "Perform the actual fact insertion, optionally making them unconditional."
   [facts unconditional]
-  (let [{:keys [rulebase transient-memory transport insertions get-alphas-fn]} eng/*current-session*
+  (let [{:keys [rulebase transient-memory transport insertions get-alphas-fn listener]} eng/*current-session*
         {:keys [node token]} eng/*rule-context*]
 
     ;; Update the insertion count.
@@ -63,7 +63,7 @@
     (doseq [[alpha-roots fact-group] (get-alphas-fn facts)
             root alpha-roots]
 
-      (eng/alpha-activate root fact-group transient-memory transport))))
+      (eng/alpha-activate root fact-group transient-memory transport listener))))
 
 (defn insert!
   "To be executed within a rule's right-hand side, this inserts a new fact or facts into working memory.
@@ -105,7 +105,7 @@
    have a specific need, it is better to simply do inserts on the rule's right-hand side, and let
    Clara's underlying truth maintenance retract inserted items if their support becomes false."
   [& facts]
-  (let [{:keys [rulebase transient-memory transport insertions get-alphas-fn]} eng/*current-session*]
+  (let [{:keys [rulebase transient-memory transport insertions get-alphas-fn listener]} eng/*current-session*]
 
     ;; Update the count so the rule engine will know when we have normalized.
     (swap! insertions + (count facts))
@@ -113,7 +113,7 @@
     (doseq [[alpha-roots fact-group] (get-alphas-fn facts)
             root alpha-roots]
 
-      (eng/alpha-retract root fact-group transient-memory transport))))
+      (eng/alpha-retract root fact-group transient-memory transport listener))))
 
 (defn accumulate
   "Creates a new accumulator based on the given properties:
