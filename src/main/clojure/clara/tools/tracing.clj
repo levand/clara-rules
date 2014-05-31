@@ -32,6 +32,19 @@
   (retract-facts [listener facts]
     (append-trace listener {:type :retract-facts :facts facts}))
 
+  (add-accum-reduced [listener node join-bindings result fact-bindings]
+    (append-trace listener {:type :accum-reduced
+                            :node-id (:id node)
+                            :join-bindings join-bindings
+                            :result result
+                            :fact-bindings fact-bindings}))
+
+  (add-activations [listener node activations]
+    (append-trace listener {:type :add-activations :node-id (:id node) :activations activations}))
+
+  (remove-activations [listener node activations]
+    (append-trace listener {:type :remove-activations :node-id (:id node) :activations activations}))
+
   (fire-rules [listener node]
     (append-trace listener {:type :fire-rules :node-id (:id node)}))
 

@@ -4,6 +4,7 @@
 (defprotocol IPersistentEventListener
   (to-transient [listener]))
 
+;; TODO: Handle add-accum-reduced
 (defprotocol ITransientEventListener
   (left-activate [listener node tokens])
   (left-retract [listener node tokens])
@@ -11,6 +12,9 @@
   (right-retract [listener node elements])
   (add-facts [listener facts])
   (retract-facts [listener facts])
+  (add-accum-reduced [listener node join-bindings result fact-bindings])
+  (add-activations [listener node activations])
+  (remove-activations [listener node activations])
   (fire-rules [listener node])
   (send-message [listener message])
   (to-persistent [listener]))
@@ -29,6 +33,12 @@
   (add-facts [listener facts]
     listener)
   (retract-facts [listener facts]
+    listener)
+  (add-accum-reduced [listener node join-bindings result fact-bindings]
+    listener)
+  (add-activations [listener node activations]
+    listener)
+  (remove-activations [listener node activations]
     listener)
   (fire-rules [listener node]
     listener)
@@ -70,6 +80,18 @@
     (doseq [child children]
       (retract-facts child facts)))
 
+  (add-accum-reduced [listener node join-bindings result fact-bindings]
+    (doseq [child children]
+      (add-accum-reduced child node join-bindings result fact-bindings)))
+
+  (add-activations [listener node activations]
+    (doseq [child children]
+      (add-activations child node activations)))
+
+  (remove-activations [listener node activations]
+    (doseq [child children]
+      (remove-activations child node activations)))
+
   (fire-rules [listener node]
     (doseq [child children]
       (fire-rules child node)))
@@ -98,64 +120,3 @@
 
 ;; Default listener.
 (def default-listener (NullListener.))
-
-(declare to-tracing-listener)
-
-(deftype PersistentTracingListener [trace]
-  IPersistentEventListener
-  (to-transient [listener]
-    (to-tracing-listener listener)))
-
-(declare append-trace)
-
-(deftype TracingListener [trace]
-  ITransientEventListener
-  (left-activate [listener node tokens]
-    (append-trace listener {:type :left-activate :node-id (:id node) :tokens tokens}))
-
-  (left-retract [listener node tokens]
-    (append-trace listener {:type :left-retract :node-id (:id node) :tokens tokens}))
-
-  (right-activate [listener node elements]
-    (append-trace listener {:type :right-activate :node-id (:id node) :elements elements}))
-
-  (right-retract [listener node elements]
-    (append-trace listener {:type :right-retract :node-id (:id node) :elements elements}))
-
-  (add-facts [listener facts]
-    (println "ADDING:" facts)
-    (append-trace listener {:type :add-facts :facts facts}))
-
-  (retract-facts [listener facts]
-    (append-trace listener {:type :retract-facts :facts facts}))
-
-  (fire-rules [listener node]
-    (append-trace listener {:type :fire-rules :node-id (:id node)}))
-
-  (send-message [listener message])
-
-  (to-persistent [listener]
-    (PersistentTracingListener. @trace)))
-
-(defn- to-tracing-listener [^PersistentTracingListener listener]
-  (TracingListener. (atom (.-trace listener))))
-
-(defn- append-trace
-  "Appends a trace event and returns a new listener with it."
-  [^TracingListener listener event]
-  (reset! (.-trace listener) (conj @(.-trace listener) event)))
-
-(defn tracing-listener
-  "Creates a persistent tracing event listener"
-  []
-  (PersistentTracingListener. []))
-
-(defn get-trace
-  "Returns the trace from the given session."
-  [session]
-  ;; TODO: get-listeners, find the tracing listener, and return the trace...
-  )
-
-
-(defn get-trace [^PersistentTracingListener tracing-listener]
-  (.-trace tracing-listener))
