@@ -40,15 +40,13 @@
                             :fact-bindings fact-bindings}))
 
   (add-activations [listener node activations]
-    (append-trace listener {:type :add-activations :node-id (:id node) :activations activations}))
+    (append-trace listener {:type :add-activations :node-id (:id node) :tokens (map :token activations)}))
 
   (remove-activations [listener node activations]
     (append-trace listener {:type :remove-activations :node-id (:id node) :activations activations}))
 
   (fire-rules [listener node]
     (append-trace listener {:type :fire-rules :node-id (:id node)}))
-
-  (send-message [listener message])
 
   (to-persistent [listener]
     (PersistentTracingListener. @trace)))
@@ -66,10 +64,39 @@
   []
   (PersistentTracingListener. []))
 
+(defn is-tracing?
+  "Returns true if the given session has tracing enabled, false otherwise."
+  [session]
+  (let [{:keys [listeners]} (eng/components session)]
+    (boolean (some #(instance? PersistentTracingListener %) listeners))))
+
+(defn with-tracing
+  "Returns a new session identical to the given one, but with tracing enabled.
+   The given session is returned unmodified if tracing is already enabled."
+  [session]
+  (if (is-tracing? session)
+    session
+    (let [{:keys [listeners] :as components} (eng/components session)]
+      (eng/assemble (assoc components
+                      :listeners
+                      (conj listeners (PersistentTracingListener. [])))))))
+
+(defn without-tracing
+  "Returns a new session identical to the given one, but with tracing disabled
+   The given session is returned unmodified if tracing is already disabled."
+  [session]
+  (if (is-tracing? session)
+    (let [{:keys [listeners] :as components} (eng/components session)]
+      (eng/assemble (assoc components
+                      :listeners
+                      (remove #(instance? PersistentTracingListener %) listeners))))
+    session))
+
 (defn get-trace
   "Returns the trace from the given session."
   [session]
-  (if-let [listener (->> (eng/get-listeners session)
+  (if-let [listener (->> (eng/components session)
+                         :listeners
                          (filter #(instance? PersistentTracingListener %) )
                          (first))]
     (.-trace ^PersistentTracingListener listener)

@@ -5,6 +5,7 @@
             [clara.rules.compiler :as com]
             [clara.rules.schema :as schema]
             [clara.rules.dsl :as dsl]
+            [clara.rules.listener :as l]
             [schema.core :as sc])
   (import [clara.rules.engine LocalTransport LocalSession]))
 
@@ -59,6 +60,8 @@
     ;; Track this insertion in our transient memory so logical retractions will remove it.
     (when (not unconditional)
       (mem/add-insertions! transient-memory node token facts))
+
+    (l/add-facts listener facts)
 
     (doseq [[alpha-roots fact-group] (get-alphas-fn facts)
             root alpha-roots]

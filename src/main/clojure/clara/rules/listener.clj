@@ -16,7 +16,6 @@
   (add-activations [listener node activations])
   (remove-activations [listener node activations])
   (fire-rules [listener node])
-  (send-message [listener message])
   (to-persistent [listener]))
 
 ;; A listener that does nothing.
@@ -41,8 +40,6 @@
   (remove-activations [listener node activations]
     listener)
   (fire-rules [listener node]
-    listener)
-  (send-message [listener message]
     listener)
   (to-persistent [listener]
     listener)
@@ -96,10 +93,6 @@
     (doseq [child children]
       (fire-rules child node)))
 
-  (send-message [listener message]
-    (doseq [child children]
-      (send-message child message)))
-
   (to-persistent [listener]
     (delegating-listener (map to-persistent children))))
 
@@ -112,6 +105,11 @@
   "Returns a listener that delegates to its children."
   [children]
   (PersistentDelegatingListener. children))
+
+(defn null-listener?
+  "Returns true if the given listener is the null listener, false otherwise."
+  [listener]
+  (instance? NullListener listener))
 
 (defn get-children
   "Returns the children of a delegating listener."

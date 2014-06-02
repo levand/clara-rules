@@ -728,16 +728,14 @@
         ;; of alpha nodes they target.
         ;; We cache an alpha-map for facts of a given type to avoid computing
         ;; them for every fact entered.
-        get-alphas-fn (create-get-alphas-fn fact-type-fn ancestors-fn rulebase)
-        listener (if-let [listeners (:listeners options)]
-                   (listener/delegating-listener listeners)
-                   listener/default-listener)]
+        get-alphas-fn (create-get-alphas-fn fact-type-fn ancestors-fn rulebase)]
 
-    (LocalSession. rulebase
-                   (eng/local-memory rulebase transport)
-                   transport
-                   listener
-                   get-alphas-fn)))
+    (eng/assemble {:rulebase rulebase
+                   :memory (eng/local-memory rulebase transport)
+                   :transport transport
+                   :listeners (get options :listeners  [])
+                   :get-alphas-fn get-alphas-fn
+                   })))
 
 (defn mk-session
   "Creates a new session using the given rule source. Thew resulting session

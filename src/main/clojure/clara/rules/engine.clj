@@ -2,7 +2,7 @@
   "The Clara rules engine. Most users should use only the clara.rules namespace."
   (:require [clojure.reflect :as reflect]
             [clojure.core.reducers :as r]
-            [clojure.set :as s]
+            [schema.core :as s]
             [clojure.string :as string]
             [clara.rules.memory :as mem]
             [clara.rules.listener :as l]
@@ -27,6 +27,20 @@
 ;; Token with no bindings, used as the root of beta nodes.
 (def empty-token (->Token [] {}))
 
+;; Schema for the structure returned by the components
+;; function on the session protocol.
+;; This is simply a comment rather than first-class schema
+;; for now since it's unused for validation and created
+;; undesired warnings as described at https://groups.google.com/forum/#!topic/prismatic-plumbing/o65PfJ4CUkI
+(comment
+
+  (def session-components-schema
+    {:rulebase s/Any
+     :memory s/Any
+     :transport s/Any
+     :listeners [s/Any]
+     :get-alphas-fn s/Any}))
+
 ;; Returns a new session with the additional facts inserted.
 (defprotocol ISession
 
@@ -42,14 +56,8 @@
   ;; Runs a query agains thte session.
   (query [session query params])
 
-  ;; Returns the working memory implementation used by the session.
-  (working-memory [session])
-
-  ;; Returns the listeners associated with the session.
-  (get-listeners [session])
-
-  ;; Sends a message to the session listeners. TODO: document the structure.
-  (send-to-listeners [session message]))
+  ;; Returns the components of a session as defined in the session-components-schema
+  (components [session]))
 
 ;; Left activation protocol for various types of beta nodes.
 (defprotocol ILeftActivate
@@ -82,15 +90,11 @@
   (retract-elements [transport memory listener nodes elements])
   (retract-tokens [transport memory listener nodes tokens]))
 
-;; Enable transport tracing for debugging purposes.
-(def ^:dynamic *trace-transport* false)
 
 ;; Simple, in-memory transport.
 (deftype LocalTransport []
   ITransport
   (send-elements [transport memory listener nodes elements]
-    (when (and *trace-transport* (seq elements))
-      (println "ELEMENTS " elements " TO " (map description nodes)))
 
     (doseq [node nodes
             :let [join-keys (get-join-keys node)]]
@@ -117,8 +121,6 @@
                           listener)))))
 
   (send-tokens [transport memory listener nodes tokens]
-    (when (and *trace-transport* (seq tokens))
-      (println "TOKENS " tokens " TO " (map description nodes)))
 
     (doseq [node nodes
             :let [join-keys (get-join-keys node)]]
@@ -143,8 +145,6 @@
                          listener)))))
 
   (retract-elements [transport memory listener nodes elements]
-    (when (and *trace-transport* (seq elements))
-      (println "RETRACT ELEMENTS " elements " TO " (map description nodes)))
     (doseq  [[bindings element-group] (group-by :bindings elements)
              node nodes]
       (right-retract node
@@ -155,8 +155,6 @@
                      listener)))
 
   (retract-tokens [transport memory listener nodes tokens]
-    (when (and *trace-transport* (seq tokens))
-      (println "RETRACT TOKENS " tokens " TO " (map description nodes)))
     (doseq  [[bindings token-group] (group-by :bindings tokens)
              node nodes]
       (left-retract  node
@@ -666,29 +664,36 @@
     (let [query-node (get-in rulebase [:query-nodes query])]
       (when (= nil query-node)
         (platform/throw-error (str "The query " query " is invalid or not included in the rule base.")))
-      (map :bindings (mem/get-tokens (mem/to-transient (working-memory session)) query-node params))))
+      (map :bindings (mem/get-tokens (mem/to-transient memory) query-node params))))
 
-  (working-memory [session] memory)
+  (components [session]
+    {:rulebase rulebase
+     :memory memory
+     :transport transport
+     :listeners (if (l/null-listener? listener)
+                  []
+                  (l/get-children listener))
+     :get-alphas-fn get-alphas-fn}))
 
-  (get-listeners [session]
-    (if (= listener l/default-listener)
-      []
-      (l/get-children listener)))
+(defn assemble
+  "Assembles a session from the given components, which must be a map
+   containing the following:
 
-  (send-to-listeners [session message]
+   :rulebase A recorec matching the clara.rules.compiler/Rulebase structure.
+   :memory An implementation of the clara.rules.memory/IMemoryReader protocol
+   :transport An implementation of the clara.rules.engine/ITransport protocol
+   :listeners A vector of listeners implementing the clara.rules.listener/IPersistentListener protocol
+   :get-alphas-fn The function used to
 
-    ;; Send the message to the listeners and then return
-    ;; the updated state.
-    (let [updated-listener (-> (l/to-transient listener)
-                               (l/send-message message)
-                               (l/to-persistent))]
-
-      (LocalSession. rulebase
-                     memory
-                     transport
-                     updated-listener
-                     get-alphas-fn))))
-
+     "
+  [{:keys [rulebase memory transport listeners get-alphas-fn]}]
+  (LocalSession. rulebase
+                 memory
+                 transport
+                 (if (> (count listeners) 0)
+                   (l/delegating-listener listeners)
+                   l/default-listener)
+                 get-alphas-fn))
 
 (defn local-memory
   "Returns a local, in-process working memory."
