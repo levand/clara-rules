@@ -69,5 +69,5 @@
                     (fire-rules))]
 
     ;; Ensure expected events occur in order.
-    (is (= [:add-facts :right-activate :left-activate :add-activations :add-facts]
+    (is (= [:add-facts :right-activate :left-activate :add-activations :add-facts-logical]
            (map :type (t/get-trace session))))))

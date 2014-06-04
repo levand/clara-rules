@@ -29,6 +29,9 @@
   (add-facts [listener facts]
     (append-trace listener {:type :add-facts :facts facts}))
 
+  (add-facts-logical [listener node token facts]
+    (append-trace listener {:type :add-facts-logical :token token :facts facts}))
+
   (retract-facts [listener facts]
     (append-trace listener {:type :retract-facts :facts facts}))
 

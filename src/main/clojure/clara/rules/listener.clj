@@ -11,6 +11,7 @@
   (right-activate [listener node elements])
   (right-retract [listener node elements])
   (add-facts [listener facts])
+  (add-facts-logical [listener node token facts])
   (retract-facts [listener facts])
   (add-accum-reduced [listener node join-bindings result fact-bindings])
   (add-activations [listener node activations])
@@ -30,6 +31,8 @@
   (right-retract [listener node elements]
     listener)
   (add-facts [listener facts]
+    listener)
+  (add-facts-logical [listener node token facts]
     listener)
   (retract-facts [listener facts]
     listener)
@@ -72,6 +75,10 @@
   (add-facts [listener facts]
     (doseq [child children]
       (add-facts child facts)))
+
+  (add-facts-logical [listener node token facts]
+    (doseq [child children]
+      (add-facts-logical child node token facts)))
 
   (retract-facts [listener facts]
     (doseq [child children]
