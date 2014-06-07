@@ -59,10 +59,10 @@
 
     ;; Track this insertion in our transient memory so logical retractions will remove it.
     (if unconditional
-      (l/add-facts listener facts)
+      (l/insert-facts! listener facts)
       (do
         (mem/add-insertions! transient-memory node token facts)
-        (l/add-facts-logical listener node token facts)
+        (l/insert-facts-logical! listener node token facts)
         ))
 
     (doseq [[alpha-roots fact-group] (get-alphas-fn facts)

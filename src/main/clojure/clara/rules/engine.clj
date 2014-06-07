@@ -181,7 +181,7 @@
   ILeftActivate
   (left-activate [node join-bindings tokens memory transport listener]
 
-    (l/left-activate listener node tokens)
+    (l/left-activate! listener node tokens)
 
     ;; Fire the rule if it's not a no-loop rule, or if the rule is not
     ;; active in the current context.
@@ -195,14 +195,14 @@
       (let [activations (for [token tokens]
                           (->Activation node token))]
 
-        (l/add-activations listener node activations)
+        (l/add-activations! listener node activations)
 
         ;; The production matched, so add the tokens to the activation list.
         (mem/add-activations! memory activations))))
 
   (left-retract [node join-bindings tokens memory transport listener]
 
-    (l/left-retract listener node tokens)
+    (l/left-retract! listener node tokens)
 
     ;; Remove any tokens to avoid future rule execution on retracted items.
     (mem/remove-tokens! memory node join-bindings tokens)
@@ -211,7 +211,7 @@
     (let [activations (for [token tokens]
                         (->Activation node token))]
 
-      (l/remove-activations listener node activations)
+      (l/remove-activations! listener node activations)
       (mem/remove-activations! memory activations))
 
     ;; Retract any insertions that occurred due to the retracted token.
@@ -229,11 +229,11 @@
 (defrecord QueryNode [id query param-keys]
   ILeftActivate
   (left-activate [node join-bindings tokens memory transport listener]
-    (l/left-activate listener node tokens)
+    (l/left-activate! listener node tokens)
     (mem/add-tokens! memory node join-bindings tokens))
 
   (left-retract [node join-bindings tokens memory transport listener]
-    (l/left-retract listener node tokens)
+    (l/left-retract! listener node tokens)
     (mem/remove-tokens! memory node join-bindings tokens))
 
   (get-join-keys [node] param-keys)
@@ -285,7 +285,7 @@
   IRightActivate
   (right-activate [node join-bindings elements memory transport listener]
 
-    (l/right-activate listener node elements)
+    (l/right-activate! listener node elements)
 
     ;; Add elements to the working memory to support analysis tools.
     (mem/add-elements! memory node join-bindings elements)
@@ -300,7 +300,7 @@
 
   (right-retract [node join-bindings elements memory transport listener]
 
-    (l/right-retract listener node elements)
+    (l/right-retract! listener node elements)
 
     ;; Remove matching elements and send the retraction downstream.
     (retract-tokens
@@ -479,7 +479,7 @@
            ;; Send the created accumulated item to the children.
            (send-accumulated node accum-condition accumulator result-binding token previous fact-bindings transport memory listener)
 
-           (l/add-accum-reduced listener node join-bindings previous fact-bindings)
+           (l/add-accum-reduced! listener node join-bindings previous fact-bindings)
 
            ;; Add it to the working memory.
            (mem/add-accum-reduced! memory node join-bindings previous fact-bindings))
@@ -525,7 +525,7 @@
                        ((:combine-fn accumulator) previous reduced)
                        reduced)]
 
-        (l/add-accum-reduced listener node join-bindings combined bindings)
+        (l/add-accum-reduced! listener node join-bindings combined bindings)
 
         (mem/add-accum-reduced! memory node join-bindings combined bindings)
         (doseq [token matched-tokens]
@@ -613,7 +613,7 @@
     (let [transient-memory (mem/to-transient memory)
           transient-listener (l/to-transient listener)]
 
-      (l/add-facts transient-listener facts)
+      (l/insert-facts! transient-listener facts)
 
       (doseq [[alpha-roots fact-group] (get-alphas-fn facts)
               root alpha-roots]
@@ -622,7 +622,7 @@
       (LocalSession. rulebase
                      (mem/to-persistent! transient-memory)
                      transport
-                     (l/to-persistent transient-listener)
+                     (l/to-persistent! transient-listener)
                      get-alphas-fn)))
 
   (retract [session facts]
@@ -630,7 +630,7 @@
     (let [transient-memory (mem/to-transient memory)
           transient-listener (l/to-transient listener)]
 
-      (l/retract-facts transient-listener facts)
+      (l/retract-facts! transient-listener facts)
 
       (doseq [[alpha-roots fact-group] (get-alphas-fn facts)
               root alpha-roots]
@@ -639,7 +639,7 @@
       (LocalSession. rulebase
                      (mem/to-persistent! transient-memory)
                      transport
-                     (l/to-persistent transient-listener)
+                     (l/to-persistent! transient-listener)
                      get-alphas-fn)))
 
   (fire-rules [session]
@@ -656,7 +656,7 @@
       (LocalSession. rulebase
                      (mem/to-persistent! transient-memory)
                      transport
-                     (l/to-persistent transient-listener)
+                     (l/to-persistent! transient-listener)
                      get-alphas-fn)))
 
   ;; TODO: queries shouldn't require the use of transient memory.

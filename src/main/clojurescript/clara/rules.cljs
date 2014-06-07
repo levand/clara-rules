@@ -170,7 +170,7 @@
     ;; Update the insertion count.
     (swap! insertions + (count facts))
 
-    (l/add-facts listener facts)
+    (l/insert-facts! listener facts)
 
     (doseq [[alpha-roots fact-group] (get-alphas-fn facts)
             root alpha-roots]
